@@ -10,7 +10,7 @@ You would typically implement this in your HDL of choice.
 We are huge fans of [Chisel HDL](https://www.chisel-lang.org), but we do understand the necessity of [System]Verilog,
 so we have added [various utilities](/Beethoven/HW/Verilog) to make it easier to integrate external Verilog modules into your design.
 
-Second, there is the [accelerator configuration](/Beethoven/HW/Config).
+Second, there is the [accelerator configuration](#accelerator-configuration-and-building).
 The configuration informs Beethoven _how_ to build your accelerator:
 - What cores do you want in your design?
 - How many of each?
@@ -48,15 +48,17 @@ integrate Verilog code into Chisel using its [Blackbox](https://www.chisel-lang.
 	<TabItem value="Chisel" label="Chisel" default>
 ```java
 class VectorAdd extends Module {
-	val io = IO(new Bundle {
-		val vec_a = Flipped(Decoupled(UInt(32.W)))
-		val vec_b = Flipped(Decoupled(UInt(32.W)))
-		val vec_out = Decoupled(UInt(32.W))
-	}
-	io.vec_out.valid := io.vec_a.valid && io.vec_b.valid
-	io.vec_out.bits := io.vec_a.bits + io.vec_b.bits
-	io.vec_a.ready := io.vec_b.ready && io.vec_out.ready
-	io.vec_b.ready := io.vec_a.ready && io.vec_out.ready
+  val io = IO(new Bundle {
+    val vec_a = Flipped(Decoupled(UInt(32.W)))
+    val vec_b = Flipped(Decoupled(UInt(32.W)))
+    val vec_out = Decoupled(UInt(32.W))
+  })
+  // only consume an element when everyone's ready to move
+  val can_consume = io.vec_a.valid && io.vec_b.valid && io.vec_out.ready
+  io.vec_out.valid := can_consume
+  io.vec_a.ready := can_consume
+  io.vec_b.ready := can_consume
+  io.vec_out.bits := io.vec_a.bits + io.vec_b.bits
 }
 ```
 	</TabItem>
@@ -65,20 +67,22 @@ class VectorAdd extends Module {
 module VectorAdd (
 	input clk,
 	input reset,
-	input [31:0]    vec_a_bits,
-	input 	     	vec_a_valid,
-	output		vec_a_ready,
-	input [31:0] 	vec_b_bits,
-	input 		vec_b_valid,
-	output		vec_b_ready,
-	output [31:0]	vec_out_bits,
-	output 		vec_out_valid,
-	input		vec_out_ready );
+	input [31:0]  vec_a_bits,
+	input 	      vec_a_valid,
+	output		  vec_a_ready,
+	input [31:0]  vec_b_bits,
+	input 		  vec_b_valid,
+	output		  vec_b_ready,
+	output [31:0] vec_out_bits,
+	output 		  vec_out_valid,
+	input		  vec_out_ready );
+wire can_consume = vec_a_valid && vec_b_valid && vec_out_ready;
 
 assign vec_out_bits = vec_a_bits + vec_b_bits;
-assign vec_out_valid = vec_a_valid && vec_b_valid;
-assign vec_a_ready = vec_b_ready && vec_out_ready;
-assign vec_b_ready = vec_a_ready && vec_out_ready;
+
+assign vec_out_valid = can_consume;
+assign vec_a_ready = can_consume;
+assign vec_b_ready = can_consume;
 
 endmodule
 ```
@@ -188,7 +192,7 @@ Responses can also carry payload, but we exclude that functionality for simplici
 Second, you'll notice `Address()` is not a typical Verilog or Chisel type. We provide
 it to abstract away from platform-specific address-widths and provide a uniform interface.
 
-To read more about the full specification of `BeethovenIO`, click [here](/Beethoven/HW/BeethovenIO/).
+To read more about the full specification of `BeethovenIO`, click [here](#host-interface).
 
 ### Memory Interfaces
 
@@ -215,7 +219,7 @@ class VecAddConfig extends AcceleratorConfig(
 		memoryChannelConfig = List(
 			ReadChannelConfig("vec_a", dataBytes = 4),
 			ReadChannelConfig("vec_b", dataBytes = 4),
-			WriteChannelConfig("vec_b", dataBytes = 4)
+			WriteChannelConfig("vec_out", dataBytes = 4)
 		)
         )
 )
@@ -224,7 +228,7 @@ class VecAddConfig extends AcceleratorConfig(
 </Tabs>
 
 For each reader/writer, the physical data bus width is specified in the configuration.
-These can be made arbitrarily large or small [with some restrictions](/Beethoven/HW/Memory/).
+These can be made arbitrarily large or small with some restrictions. Read more [here](#memory-interfaces).
 
 ### Full Implementation
 
@@ -235,73 +239,79 @@ Below, you can see the full implementation.
 <Tabs>
         <TabItem value="impl" label="Implementation" default>
 ```java
+import chisel3._
+import chisel3.util._
+import beethoven._
+import beethoven.common._
+import chipsalliance.rocketchip.config.Parameters
+
 class VectorAddCore()(implicit p: Parameters) extends AcceleratorCore {
-	val my_io = BeethovenIO(new AccelCommand("vector_add") {
-		val vec_a_addr = Address()
-		val vec_b_addr = Address()
-		val vec_out_addr = Address()
-		val vector_length = UInt(32.W)
-	}, EmptyAccelResponse())
+  val my_io = BeethovenIO(new AccelCommand("vector_add") {
+    val vec_a_addr = Address()
+    val vec_b_addr = Address()
+    val vec_out_addr = Address()
+    val vector_length = UInt(32.W)
+  }, EmptyAccelResponse())
 
-	val vec_a_reader = getReaderModule("vec_a")
-	val vec_b_reader = getReaderModule("vec_b")
-	val vec_out_writer = getWriterModule("vec_out")
-	
-	val vec_length_bytes = my_io.req.bits.vector_length * 4.U
+  val vec_a_reader = getReaderModule("vec_a")
+  val vec_b_reader = getReaderModule("vec_b")
+  val vec_out_writer = getWriterModule("vec_out")
 
-	// from our previously defined module
-	val dut = Module(new VectorAdd())
+  val vec_length_bytes = my_io.req.bits.vector_length * 4.U
 
-	/**
-	  * provide sane default values
-	  */
-	my_io.req.ready := false.B
-	my_io.resp.valid := false.B
-	// .fire is a Chisel-ism for "ready && valid"
-	vec_a_reader.requestChannel.valid := my_io.req.fire
-	vec_a_reader.requestChannel.bits.addr := my_io.req.bits.vec_a_addr
-	vec_a_reader.requestChannel.bits.len := vec_length_bytes
-	
-	vec_b_reader.requestChannel.valid := my_io.req.fire
-	vec_b_reader.requestChannel.bits.addr := my_io.req.bits.vec_b_addr
-	vec_b_reader.requestChannel.bits.len := vec_length_bytes
-	
-	vec_out_writer.requestChannel.valid := my_io.req.fire
-	vec_out_writer.requestChannel.bits.addr := my_io.req.bits.vec_out_addr
-	vec_out_writer.requestChannel.bits.len := vec_length_bytes
+  // from our previously defined module
+  val dut = Module(new VectorAdd())
 
-	vec_a_reader.dataChannel.ready := false.B
-	vec_b_reader.dataChannel.ready := false.B
-	vec_out_writer.dataChannel.valid := false.B
-	vec_out_writer.dataChannel.bits := DontCare
+  /**
+   * provide sane default values
+   */
+  my_io.req.ready := false.B
+  my_io.resp.valid := false.B
+  // .fire is a Chisel-ism for "ready && valid"
+  vec_a_reader.requestChannel.valid := my_io.req.fire
+  vec_a_reader.requestChannel.bits.addr := my_io.req.bits.vec_a_addr
+  vec_a_reader.requestChannel.bits.len := vec_length_bytes
 
-	dut.io.vec_a <> vec_a_reader.dataChannel
-	dut.io.vec_b <> vec_b_reader.dataChannel
-	dut.io.vec_out <> vec_out_writer.dataChannel.data
-	
-	// state machine
-	val s_idle :: s_working :: s_finish = Enum(3)
-	val state = RegInit(s_idle)
+  vec_b_reader.requestChannel.valid := my_io.req.fire
+  vec_b_reader.requestChannel.bits.addr := my_io.req.bits.vec_b_addr
+  vec_b_reader.requestChannel.bits.len := vec_length_bytes
 
-	when (state === s_idle) {
-		my_io.req.ready := vec_a_reader.requestChannel.ready && 
-				   vec_b_reader.requestChannel.ready &&
-				   vec_out_writer.requestChannel.ready
-		when (my_io.req.fire) {
-			state := s_working
-		}
-	}.elsewhen(state === s_working) {
-		// when the writer has finished writing the final datum,
-		// isFlushed will be driven high
-		when (vec_out_writer.dataChannel.isFlushed) {
-			state := s_finish
-		}
-	}.otherwise {
-		my_io.resp.valid := true.B
-		when (my_io.resp.fire) {
-			state := s_idle
-		}
-	}
+  vec_out_writer.requestChannel.valid := my_io.req.fire
+  vec_out_writer.requestChannel.bits.addr := my_io.req.bits.vec_out_addr
+  vec_out_writer.requestChannel.bits.len := vec_length_bytes
+
+  vec_a_reader.dataChannel.data.ready := false.B
+  vec_b_reader.dataChannel.data.ready := false.B
+  vec_out_writer.dataChannel.data.valid := false.B
+  vec_out_writer.dataChannel.data.bits := DontCare
+
+  dut.io.vec_a <> vec_a_reader.dataChannel.data
+  dut.io.vec_b <> vec_b_reader.dataChannel.data
+  dut.io.vec_out <> vec_out_writer.dataChannel.data
+
+  // state machine
+  val s_idle :: s_working :: s_finish :: Nil =  Enum(3)
+  val state = RegInit(s_idle)
+
+  when (state === s_idle) {
+    my_io.req.ready := vec_a_reader.requestChannel.ready &&
+      vec_b_reader.requestChannel.ready &&
+      vec_out_writer.requestChannel.ready
+    when (my_io.req.fire) {
+      state := s_working
+    }
+  }.elsewhen(state === s_working) {
+    // when the writer has finished writing the final datum,
+    // isFlushed will be driven high
+    when (vec_out_writer.dataChannel.isFlushed) {
+      state := s_finish
+    }
+  }.otherwise {
+    my_io.resp.valid := true.B
+    when (my_io.resp.fire) {
+      state := s_idle
+    }
+  }
 }
 ```
         </TabItem>
@@ -311,11 +321,11 @@ class VecAddConfig extends AcceleratorConfig(
         AcceleratorSystemConfig(
                 nCores = 1,
                 name = "myVectorAdd",
-                moduleConstructor = ModuleBuilder(p => new VectorAdd()(p)),
+                moduleConstructor = ModuleBuilder(p => new VectorAddCore()(p)),
                 memoryChannelConfig = List(
                         ReadChannelConfig("vec_a", dataBytes = 4),
                         ReadChannelConfig("vec_b", dataBytes = 4),
-                        WriteChannelConfig("vec_b", dataBytes = 4)
+                        WriteChannelConfig("vec_out", dataBytes = 4)
                 )
         )
 )
@@ -333,7 +343,7 @@ handles the rest.
 
 ```java
 object VectorAddConfig extends BeethovenBuild(new VectorAddConfig,
-  buildMode = BuildMode.Synthesis, // BuildMode.Simulator
+  buildMode = BuildMode.Synthesis,
   platform = new AWSF2Platform)
 ```
 
@@ -718,7 +728,7 @@ Users specify host-facing interfaces with `BeethovenIO()`.
 communicating with the accelerator core. You can instantiate multiple `BeethovenIO()` and it will generate
 multiple host C++ interfaces.
 
-### AccelCommand
+#### AccelCommand
 
 While we have supported arbitrary types inside `AccelCommand` in the past, maintaining the transformation between
 arbitrary Chisel types and C++ is complex so we recommend using basic types for the most consistent results. The
@@ -735,7 +745,7 @@ this delay for the number of 128-bit payloads necessary to communicate your `Acc
 `AccelCommand` takes a name as input. This will be used to construct the C++ host binding for this command.
 The accelerator will be accessible from host as `<Core-Name>::<Command-Name>`.
 
-### AccelResponse
+#### AccelResponse
 
 Responses are optional in Beethoven and are paired with a command. If a core does not respond to the core for
 a given command, then the `BeethovenIO` does not need to specify a response. To return an empty acknowledgement
@@ -777,7 +787,7 @@ namespace MyCore {
 </TabItem>
 </Tabs>
 
-### Behavior of BeethovenIO
+#### Behavior of BeethovenIO
 
 Both the command and response are coupled with ready/valid handshakes.
 For the command, the user drives the ready signal and for the response, the user drives the valid signal.
@@ -785,7 +795,7 @@ The core should not drive the ready signal high until it has returned a correspo
 The core may accept commands without a corresponding response while processing another command.
 The core should not drive the response valid high while it is not processing a command.
 
-## Accelerator Configuration and Building
+## Configuration + Build
 
 An accelerator or a piece of an accelerator is described using an `AcceleratorConfig`. An `AcceleratorConfig`
 is defined as one of a list of `AcceleratorSystemConfig`. `AcceleratorConfigs` can be concatenated with the
@@ -829,26 +839,36 @@ then you can specify this using `canReceiveSoftwareCommands`. In such circumstan
 topology for these intercommunicating cores. You specify the ways in which cores may communicate with other systems using
 `canIssueCoreCommandsTo` and `canSendDataTo` and providing the names of the systems.
 
-### Building your Accelerator
+#### Building your Accelerator
 
 Now that you've constructed an accelerator configuration, you can use a `BeethovenBuild` object to construct your accelerator
 for a given platform like so.
-```
+```java
 object MyAcceleratorBuild extends BeethovenBuild(new MyAcceleratorConfig,
-  buildMode = BuildMode.Simulation,
+    buildMode = <BuildMode>,
     platform = <Your Platform>)
 // you will see 'MyAcceleratorBuild' as an option when you run `sbt run` in the top directory.
 ```
 
+First, you must specify which platform you are building your hardware for. We have currently two well-supported FPGA platforms,
+the [Kria KV260](https://www.amd.com/en/products/system-on-modules/kria/k26/kv260-vision-starter-kit.html), and the AWS F1/F2
+cloud FPGA instances.
+
+Beethoven has two build modes: `BuildMode.Synthesis` and `BuildMode.Simulation`. When building for synthesis, we generate the
+hardware and run a platform-specific 
+
 ## Platforms
 
-The currently supported platforms:
-- [Kria KV260](https://www.amd.com/en/products/system-on-modules/kria/k26/kv260-vision-starter-kit.html) - We believe that
-    this integration will work indentically for _all_ members of the Zynq family but have not verified this experimentally yet.
-- AWS F1/F2 - AWS offers cloud-FPGAs at a reasonable hourly price for those who aren't ready to drop $15,000 on a new 
+#### Current Platforms
+
+- AWS F1/F2 [[link]](https://aws.amazon.com/ec2/instance-types/f2/) [[GitHub]](https://github.com/aws/aws-fpga) - 
+    AWS offers cloud-FPGAs at a reasonable hourly price for those who aren't ready to drop $15,000 on a new 
     datacenter FPGA. AWS has recently phased-out use of the F1 platform and we are transferring this functionality over to the F2.
+    [See here](/Beethoven/Platform/AWSF) for a walkthrough on deploying a design on AWS F2.
+- [Zynq Ultrascale+ Series](https://www.amd.com/en/products/adaptive-socs-and-fpgas/soc/zynq-ultrascale-plus-mpsoc.html) -
+    The Zynq MPSoCs feature a dual-Core ARM A53 capable of running Linux. We use the [Kria KV260](https://www.amd.com/en/products/system-on-modules/kria/k26/kv260-vision-starter-kit.html)
+    for our development purposes. [See here](/Beethoven/Platform/Kria) for a walkthrough on deploying a design on Kria.
 - ASIC Test Chip - We are taping out a chip using Beethoven! Check back in a few months to see if the chip works. If you are
     interested in this, contact the authors. This functionality is actively in-development and some of the implementation
     in conjunction with Beethoven may require some tinkering to make it "open-source"-able.
-
 
