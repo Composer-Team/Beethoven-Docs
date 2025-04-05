@@ -1,3 +1,0 @@
-# Cross-Core Communication
-
-TODO

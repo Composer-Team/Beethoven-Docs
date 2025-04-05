@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkbeethoven_docs=self.webpackChunkbeethoven_docs||[]).push([[1235],{8552:e=>{e.exports=JSON.parse('{"name":"docusaurus-plugin-content-pages","id":"default"}')}}]);
