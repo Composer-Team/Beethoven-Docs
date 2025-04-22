@@ -14,6 +14,16 @@ supports simulation and device backends, allowing you to test the exact same sof
 simulation before you deploy it. Our simulation backend supports multiple simulators: Verilator, and
 simulators that support VPI (e.g., Icarus Verilog, VCS).
 
+<p align="center">
+![](/img/figs/execution-stack.jpg)
+</p>
+
+The software stack comprises a userspace library and a device-management runtime.
+The userspace library provides utilities for allocating accelerator-accessible memory regions and
+routines for sending Beethoven-compliant command/response messages to the accelerator. The library
+incorporates the hardware-generated C++ linkage into the programming environment, allowing the
+user to communicate with their accelerator using the same control signals exposed inside their RTL.
+
 We'll start by looking at a simple example that continues from the hardware design we developed in the
 Beethoven Hardware stack section ([link](/Beethoven/HW)).
 
@@ -50,7 +60,6 @@ set(CMAKE_CXX_STANDARD 17)
 
 beethoven_build(vector_add
     SOURCES main.cpp)
-
 ```
 
 If you've installed the Beethoven software library correctly, `find_package` should work correctly.
@@ -70,7 +79,7 @@ int main() {
 ```
 
 The `fpga_handle_t` is our way of communicating with our accelerator. Once it's been constructed
-somewhere in your executable, you'll be able to call your accelerator. First, let's look at the
+somewhere in your executable, you'll be able to call on your accelerator. First, let's look at the
 arguments to our vector-add unit.
 
 First, there's `core_id`. If we elaborated a multi-core accelerator, we can use this argument to
@@ -79,7 +88,8 @@ arguments for our vectors. When you use an `Address` type in a `BeethovenIO`, it
 use of `beethoven::remote_ptr` in the c++ linkage.
 
 `remote_ptr` is a smart pointer that we use for making allocations that are accessible from our
-accelerator. It has `shared_ptr` semantics, so you should not need to free it. The use of this
+accelerator. It has `shared_ptr` [semantics](https://en.cppreference.com/w/cpp/memory/shared_ptr),
+so you should not need to free it manually.The use of this
 special type is necessary because some accelerators share the same address space with the host
 CPU (ex. Zynq) whereas others have discrete address spaces (ex. AWS F2). We hide the implementation
 details for managing these address spaces inside the pointer type.
@@ -223,6 +233,83 @@ waveform for your execution.
 In Verilator, CTRL+C is sufficient. For VCS and Icarus, CTRL+C to exit to the simulation
 shell and run `finish`. This will ensure the waveform is properly flushed.
 
+## Beethoven Library
+
+The library implements the integration between the user's testbench process and the simulator / FPGA management process.
+There are two basic interfaces available to the programmer:
+1. Sending commands/receiving responses
+2. Allocating Memory
+
+###  Communicating with the Accelerator
+
+We strongly recommend that any communication you have with your accelerator be over the generated C++ stubs from having
+generated your hardware. If you've properly set up your environment, you should find them in `$BEETHOVEN_PATH/build/beethoven_hardware.h`.
+Whenever you call your function stub with the parameters specified by the `BeethovenIO` interface from your hardware, it will
+return a `beethoven::response_handle<type_t>`.
+
+```cpp
+template<typename t>
+class response_handle {
+    t get();
+    std::optional<t> try_get();
+};
+```
+
+The response handle can be used to allow asynchronous execution of the host with the accelerator device. Calling
+`.get()` blocks the host process while waiting for the accelerator response. `.try_get()` will query for a response
+from the accelerator and will return a None-type if the response is not ready yet.
+
+
+### Allocating Memory
+
+Beethoven exposes a typical `malloc` interface to the user. It should work identically on embedded platforms, discrete platforms,
+and in simulation - the user should not need to change their usage of malloc based on the platform. The malloc interface is a
+member of `fpga_handle_t`, which facilitates communication with the accelerator, and should be used like so.
+```cpp
+using namespace beethoven;
+
+int main() {
+    fpga_handle_t handle;
+    ...
+    auto alloc = handle.malloc(64);
+}
+```
+
+`.malloc()` will not only allocate space in the accelerator address space, but will allocate an associated space in the host
+address space. The addresses to these spaces are accessible from the return type from malloc: `remote_ptr`.
+
+`remote_ptr` is a smart pointer type that will free itself when no valid references to the allocation exist (equivalent to std::shared\_ptr).
+The host address is accessible via `.getHostAddr()` and the FPGA address is accessible via `.getFpgaAddr()`. Example:
+
+```cpp
+using namespace beethoven;
+
+int main() {
+    fpga_handle_t handle;
+    ...
+    auto alloc = handle.malloc(64);
+
+    void * host_allocation = alloc.getHostAddr();
+    uint64_t fpga_allocation = alloc.getFpgaAddr();
+}
+```
+
+In practice there is no reason to use `.getFpgaAddr()` because when you use the `Address` type inside the declaration of your hardware's
+`BeethovenIO` interfaces, it will produce a C++ stub that directly takes in your `remote_ptr` object and extracts the FPGA address for you.
+
+### DMA Transfers
+
+To move data between host and accelerator address spaces, use the `handle.copy_to_fpga` and `handle.copy_from_fpga` routines.
+
+```cpp
+void copy_to_fpga(const remote_ptr &dst);
+void copy_from_fpga(const remote_ptr &src);
+```
+
+These routines deduce from the generated hardware header how to instrument memory DMA between the host and accelerator. These routines are
+only _really_ necessary on platforms with discrete accelerator/host memory spaces, but we think it's a good idea to instrument your code
+with these routines even if you don't need them to improve code portability across platforms.
+ 
 ## Beethoven Runtime
 
 When using the runtime over a real FPGA, the runtime manages all communication between host
@@ -231,6 +318,86 @@ FPGA for responses. The rate of this polling is configurable in the source file
 `src/response_poller.cc` [[link]](https://github.com/Composer-Team/Beethoven-Runtime/blob/master/src/response_poller.cc)
 if you wish to increase or decrease the rate. By default, it is set to 10µs.
 
+
+### Building
+
+<Tabs>
+<TabItem value="a" label="Simulation (Icarus Verilog)" default>
+```bash
+git clone https://github.com/Composer-Team/Beethoven-Runtime
+cd Beethoven-Runtime
+bash setup_dramsim.sh
+# this will build and run the simulator
+make sim_icarus
+```
+</TabItem>
+<TabItem value="b" label="Simulation (VCS)">
+```bash
+git clone https://github.com/Composer-Team/Beethoven-Runtime
+cd Beethoven-Runtime
+bash setup_dramsim.sh
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DTARGET=sim -DSIMULATOR=vcs
+make -j
+../scripts/build_vcs.sh
+
+# run the runtime/simulator
+./BeethovenTop
+```
+</TabItem>
+<TabItem value="c" label="Simulation (Verilator)">
+```bash
+git clone https://github.com/Composer-Team/Beethoven-Runtime
+cd Beethoven-Runtime
+bash setup_dramsim.sh
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DTARGET=sim -DSIMULATOR=verilator
+make -j
+
+# run the runtime/simulator
+./BeethovenRuntime
+```
+</TabItem>
+<TabItem value="d" label="AWS F2">
+```bash
+git clone https://github.com/Composer-Team/Beethoven-Runtime
+cd Beethoven-Runtime
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DTARGET=fpga -DBACKEND=F2
+make -j
+
+# run the runtime
+sudo ./BeethovenRuntime
+```
+</TabItem>
+<TabItem value="e" label="Zynq">
+```bash
+git clone https://github.com/Composer-Team/Beethoven-Runtime
+cd Beethoven-Runtime
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DTARGET=fpga -DBACKEND=Kria
+make -j
+
+# run the runtime
+sudo ./BeethovenRuntime
+```
+</TabItem>
+</Tabs>
+
+### Memory Modeling
+
+Beethoven hardware emits memory transactions using the AXI4 protocol. To accurately model DRAM latencies in our simulator
+we implement a AXI4-DDR controller that models DDR using [DRAMSim3](https://github.com/umd-memsys/DRAMsim3/tree/master).
+DRAMSim3 allows us to model different memory technologies by simply changing the memory configuration input file.
+By default we use the `DDR4_8Gb_x16_3200.ini` config that comes with DRAMSim, but you can change the configuration
+by defining the `DRAMSIM_CONFIG` build variable for VPI-based builds or by starting the Verilator-based simulator
+using `./BeethovenTop -dramconfig <your_config>`. 
+
+## Allocator Implementation
 ### Discrete Device Allocator
 
 When operating on a discrete device, Beethoven provides a thread-safe allocator implementation

@@ -10,7 +10,7 @@ You would typically implement this in your HDL of choice.
 We are huge fans of [Chisel HDL](https://www.chisel-lang.org), but we do understand the necessity of [System]Verilog,
 so we have added [various utilities](/Beethoven/HW/Verilog) to make it easier to integrate external Verilog modules into your design.
 
-Second, there is the [accelerator configuration](#accelerator-configuration-and-building).
+Second, there is the [accelerator configuration](/Beethoven/HW/#accelerator-configuration-and-building).
 The configuration informs Beethoven _how_ to build your accelerator:
 - What cores do you want in your design?
 - How many of each?
@@ -194,7 +194,7 @@ it to abstract away from platform-specific address-widths and provide a uniform 
 
 To read more about the full specification of `BeethovenIO`, click [here](#host-interface).
 
-### Memory Interfaces
+### Adding Memory Interfaces
 
 Now that we have a way of obtaining the necessary function arguments from the host, we need to read
 our operands from memory. We can do this by declaring a `Reader`. Usually you would have to read up
@@ -473,6 +473,7 @@ transaction. You must drive the input signals.
 - `dataChannel.data.ready` (Output): This is driven high iff data can be consumed on the data bus.
 - `dataChannel.data.bits` (Input): The data to be written.
 
+
 #### Transaction Waveform
 Below, we show a waveform for an 8-byte transaction on a 4-byte-wide reader channel. Writers operate similarly except for the
 `isFlushed` signal.
@@ -562,7 +563,7 @@ case class ScratchpadFeatures(readOnly: Boolean = false,
             unpacking that needs to be done.
         - `PackedSubword` - in other cases, the number of bits do not align to a byte boundary and so we introduce this
             alternative strategy. There is still some memory overhead here, but it can be minimized. See
-            [here](#packed-subword-scratchpad) for the specification.
+            [here](/Beethoven/HW/#packed-subword-scratchpad) for the specification.
     - `nBanks` - **[Default=1]**:  For deep, narrow memories, you may want to make better use of memory cells by putting more than one data
         on a row. You can increase this parameter to control the number of datas per row.
     - `writeEnableMuxing` - **[Default=false]**: You can enable byte-wise write enable on the data port using this.
@@ -734,7 +735,7 @@ While we have supported arbitrary types inside `AccelCommand` in the past, maint
 arbitrary Chisel types and C++ is complex so we recommend using basic types for the most consistent results. The
 recommended types are, `UInt`, `SInt`, `Bool`, and `Address`. These types may be at most 128b long. There is no
 limit to the number of elements in the `AccelCommand`. We discuss memory allocation for the accelerator and the
-associated `Address` type [here](/Beethoven/SW/Allocator).
+associated `Address` type [here](/Beethoven/SW/#beethoven-runtime).
 
 Beethoven's host-\>HW interface is, for our current platforms, an 32-bit AXI-Lite port. For legacy reasons, we
 encode commands using the RISC-V RoCC instruction format. RoCC instructions are a 32-bit instruction (which we
@@ -872,3 +873,4 @@ hardware and run a platform-specific
     interested in this, contact the authors. This functionality is actively in-development and some of the implementation
     in conjunction with Beethoven may require some tinkering to make it "open-source"-able.
 
+If you're interested in developing your own platform, [read here](/Beethoven/Platform/NewPlatform).
