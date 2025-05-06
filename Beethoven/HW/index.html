@@ -5,7 +5,7 @@
 <meta name="generator" content="Docusaurus v3.7.0">
 <title data-rh="true">Beethoven Hardware Stack | Beethoven</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://composer-team.github.io/Beethoven-Docs/img/docusaurus-social-card.jpg"><meta data-rh="true" name="twitter:image" content="https://composer-team.github.io/Beethoven-Docs/img/docusaurus-social-card.jpg"><meta data-rh="true" property="og:url" content="https://composer-team.github.io/Beethoven-Docs/Beethoven/HW/"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docusaurus_tag" content="default"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docsearch:docusaurus_tag" content="default"><meta data-rh="true" property="og:title" content="Beethoven Hardware Stack | Beethoven"><meta data-rh="true" name="description" content="A design of an accelerator is broken down into two parts."><meta data-rh="true" property="og:description" content="A design of an accelerator is broken down into two parts."><link data-rh="true" rel="icon" href="/Beethoven-Docs/img/favicon.png"><link data-rh="true" rel="canonical" href="https://composer-team.github.io/Beethoven-Docs/Beethoven/HW/"><link data-rh="true" rel="alternate" href="https://composer-team.github.io/Beethoven-Docs/Beethoven/HW/" hreflang="en"><link data-rh="true" rel="alternate" href="https://composer-team.github.io/Beethoven-Docs/Beethoven/HW/" hreflang="x-default"><link rel="alternate" type="application/rss+xml" href="/Beethoven-Docs/blog/rss.xml" title="Beethoven RSS Feed">
 <link rel="alternate" type="application/atom+xml" href="/Beethoven-Docs/blog/atom.xml" title="Beethoven Atom Feed"><link rel="stylesheet" href="/Beethoven-Docs/assets/css/styles.88a469ff.css">
-<script src="/Beethoven-Docs/assets/js/runtime~main.6f4423ee.js" defer="defer"></script>
+<script src="/Beethoven-Docs/assets/js/runtime~main.0d4d477e.js" defer="defer"></script>
 <script src="/Beethoven-Docs/assets/js/main.b73c5fc6.js" defer="defer"></script>
 </head>
 <body class="navigation-with-keyboard">
@@ -15,7 +15,7 @@ First, there is the functional unit implementation, the core.
 You would typically implement this in your HDL of choice.
 We are huge fans of <a href="https://www.chisel-lang.org" target="_blank" rel="noopener noreferrer">Chisel HDL</a>, but we do understand the necessity of [System]Verilog,
 so we have added <a href="/Beethoven-Docs/Beethoven/HW/Verilog">various utilities</a> to make it easier to integrate external Verilog modules into your design.</p>
-<p>Second, there is the <a href="/Beethoven-Docs/Beethoven/HW/#accelerator-configuration-and-building">accelerator configuration</a>.
+<p>Second, there is the <a href="/Beethoven-Docs/Beethoven/HW/#configuration--build">accelerator configuration</a>.
 The configuration informs Beethoven <em>how</em> to build your accelerator:</p>
 <ul>
 <li>What cores do you want in your design?</li>
@@ -213,8 +213,7 @@ payloads that may not align to data boundary.<!-- -->
 <li><code>flatPacked</code> - this assumes that the number of bits are power-of-two byte-aligned so there is really not much
 unpacking that needs to be done.</li>
 <li><code>PackedSubword</code> - in other cases, the number of bits do not align to a byte boundary and so we introduce this
-alternative strategy. There is still some memory overhead here, but it can be minimized. See
-<a href="/Beethoven-Docs/Beethoven/HW/#packed-subword-scratchpad">here</a> for the specification.</li>
+alternative strategy. There is still some memory overhead here, but it can be minimized.</li>
 </ul>
 </li>
 <li><code>nBanks</code> - <strong>[Default=1]</strong>:  For deep, narrow memories, you may want to make better use of memory cells by putting more than one data
