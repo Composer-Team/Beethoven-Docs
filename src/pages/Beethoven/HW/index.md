@@ -479,7 +479,7 @@ Below, we show a waveform for an 8-byte transaction on a 4-byte-wide reader chan
 `isFlushed` signal.
 
 <p align="center">
-![](/img/figs/read-tx.jpg)
+<img src="/Beethoven-Docs/img/figs/read-tx.jpg"/>
 </p>
 
 The request channel first exchanges a handshake with the address and transaction length payloads. Then, after an

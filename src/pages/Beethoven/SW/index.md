@@ -15,7 +15,7 @@ simulation before you deploy it. Our simulation backend supports multiple simula
 simulators that support VPI (e.g., Icarus Verilog, VCS).
 
 <p align="center">
-![](/img/figs/execution-stack.jpg)
+<img src="/Beethoven-Docs/img/figs/execution-stack.jpg" />
 </p>
 
 The software stack comprises a userspace library and a device-management runtime.
