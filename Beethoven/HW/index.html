@@ -5,7 +5,7 @@
 <meta name="generator" content="Docusaurus v3.7.0">
 <title data-rh="true">Beethoven Hardware Stack | Beethoven</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://composer-team.github.io/Beethoven-Docs/img/docusaurus-social-card.jpg"><meta data-rh="true" name="twitter:image" content="https://composer-team.github.io/Beethoven-Docs/img/docusaurus-social-card.jpg"><meta data-rh="true" property="og:url" content="https://composer-team.github.io/Beethoven-Docs/Beethoven/HW/"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docusaurus_tag" content="default"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docsearch:docusaurus_tag" content="default"><meta data-rh="true" property="og:title" content="Beethoven Hardware Stack | Beethoven"><meta data-rh="true" name="description" content="A design of an accelerator is broken down into two parts."><meta data-rh="true" property="og:description" content="A design of an accelerator is broken down into two parts."><link data-rh="true" rel="icon" href="/Beethoven-Docs/img/favicon.png"><link data-rh="true" rel="canonical" href="https://composer-team.github.io/Beethoven-Docs/Beethoven/HW/"><link data-rh="true" rel="alternate" href="https://composer-team.github.io/Beethoven-Docs/Beethoven/HW/" hreflang="en"><link data-rh="true" rel="alternate" href="https://composer-team.github.io/Beethoven-Docs/Beethoven/HW/" hreflang="x-default"><link rel="alternate" type="application/rss+xml" href="/Beethoven-Docs/blog/rss.xml" title="Beethoven RSS Feed">
 <link rel="alternate" type="application/atom+xml" href="/Beethoven-Docs/blog/atom.xml" title="Beethoven Atom Feed"><link rel="stylesheet" href="/Beethoven-Docs/assets/css/styles.88a469ff.css">
-<script src="/Beethoven-Docs/assets/js/runtime~main.0d4d477e.js" defer="defer"></script>
+<script src="/Beethoven-Docs/assets/js/runtime~main.ada888fa.js" defer="defer"></script>
 <script src="/Beethoven-Docs/assets/js/main.b73c5fc6.js" defer="defer"></script>
 </head>
 <body class="navigation-with-keyboard">
@@ -132,30 +132,30 @@ at byte-granularity and the addresses/lengths must be aligned to size of the dat
 4-byte data bus must only launch 4B-aligned transactions.</p>
 <p>The request channel is identical for readers and writers.</p>
 <ul>
-<li><code>requestChannel.valid</code> (Output): drive this signal high to start a new transaction. The transaction will begin only
+<li><code>requestChannel.valid</code> (Input to reader): drive this signal high to start a new transaction. The transaction will begin only
 when the ready and valid are high together on the rising clock edge.</li>
-<li><code>requestChannel.ready</code> (Input): This signal will be driven high when the reader is ready to begin a new transaction.
+<li><code>requestChannel.ready</code> (Output from reader): This signal will be driven high when the reader is ready to begin a new transaction.
 In-progress transactions cannot be interrupted an must be fully consumed before the reader is made ready again.</li>
-<li><code>requestChannel.bits.address</code>: the starting address for the transaction.</li>
-<li><code>requestChannel.bits.len</code>: the length of a transaction in bytes. This may be made arbitrarily long.</li>
+<li><code>requestChannel.bits.address</code> (Input to reader):  the starting address for the transaction.</li>
+<li><code>requestChannel.bits.len</code> (Input to reader): the length of a transaction in bytes. This may be made arbitrarily long.</li>
 </ul>
 <p><strong>Reader Data Channel</strong>: The data channel for the  will begin to provide valid data an indeterminate amount of time after the start of the
 transaction. You must drive the input signals.</p>
 <ul>
-<li><code>dataChannel.inProgress</code> (Output): This is driven high iff there is an in-progress transaction still active.</li>
-<li><code>dataChannel.data.valid</code> (Output): This bit is driven high when there is valid data from memory on <code>data.bits</code>.
+<li><code>dataChannel.inProgress</code> (Output from reader): This is driven high iff there is an in-progress transaction still active.</li>
+<li><code>dataChannel.data.valid</code> (Output from reader): This bit is driven high when there is valid data from memory on <code>data.bits</code>.
 It will remain high and the data will not progress to the next word until the <code>ready</code> signal is driven high.</li>
-<li><code>dataChannel.data.ready</code> (Input): This is driven high iff data can be consumed on the data bus.</li>
-<li><code>dataChannel.data.bits</code> (Output): The requested data.</li>
+<li><code>dataChannel.data.ready</code> (Input to reader): This is driven high iff data can be consumed on the data bus.</li>
+<li><code>dataChannel.data.bits</code> (Output from reader): The requested data.</li>
 </ul>
 <p><strong>Writer Data Channel</strong>:</p>
 <ul>
-<li><code>dataChannel.isFlushed</code> (Output): This is driven high iff there are no writes that have been issued to DRAM but have not
+<li><code>dataChannel.isFlushed</code> (Output from reader): This is driven high iff there are no writes that have been issued to DRAM but have not
 returned an acknowledgement.</li>
-<li><code>dataChannel.data.valid</code> (Input): Drive this high when you wish to write the data on <code>data.bits</code> to memory. Drive this
+<li><code>dataChannel.data.valid</code> (Input to reader): Drive this high when you wish to write the data on <code>data.bits</code> to memory. Drive this
 signal low when you do not wish to write to memory (including while there is no request active).</li>
-<li><code>dataChannel.data.ready</code> (Output): This is driven high iff data can be consumed on the data bus.</li>
-<li><code>dataChannel.data.bits</code> (Input): The data to be written.</li>
+<li><code>dataChannel.data.ready</code> (Output from reader): This is driven high iff data can be consumed on the data bus.</li>
+<li><code>dataChannel.data.bits</code> (Input to reader): The data to be written.</li>
 </ul>
 <h4 class="anchor anchorWithStickyNavbar_LWe7" id="transaction-waveform">Transaction Waveform<a href="#transaction-waveform" class="hash-link" aria-label="Direct link to Transaction Waveform" title="Direct link to Transaction Waveform">​</a></h4>
 <p>Below, we show a waveform for an 8-byte transaction on a 4-byte-wide reader channel. Writers operate similarly except for the
