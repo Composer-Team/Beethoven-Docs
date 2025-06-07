@@ -17,9 +17,9 @@ Below we show a high-level break-down of Beethoven into its hardware and softwar
 <area shape="rect" coords="6,226,179,248" href="/Beethoven-Docs/Beethoven/SW/#building"/>
 <area shape="rect" coords="6,198,179,220" href="/Beethoven-Docs/Beethoven/SW/#building"/>
 <area shape="rect" coords="509,218,648,240" href="https://www.chisel-lang.org"/>
-<area shape="rect" coords="370,272,618,294" href="/Beethoven-Docs/Beethoven/Platforms/NewPlatform"/>
+<area shape="rect" coords="370,272,618,294" href="/Beethoven-Docs/Beethoven/Platform/NewPlatform"/>
 <area shape="rect" coords="6,115,179,137" href="/Beethoven-Docs/Beethoven/SW/#communicating-with-the-accelerator"/>
-<area shape="poly" coords="306,254,306,31,284,31,284,254,306,254" href="/Beethoven/HW/#platforms"/>
+<area shape="poly" coords="306,254,306,31,284,31,284,254,306,254" href="/Beethoven-Docs/Beethoven/HW/#platforms"/>
 <area shape="rect" coords="6,138,179,161" href="/Beethoven-Docs/Beethoven/SW/#allocating-memory"/>
 <area shape="rect" coords="509,131,648,170" href="/Beethoven-Docs/Beethoven/HW/Verilog"/>
 <area shape="rect" coords="509,99,648,122" href="/Beethoven-Docs/Beethoven/HW/#on-chip-memory-user-managed"/>
@@ -34,6 +34,8 @@ Below we show a high-level break-down of Beethoven into its hardware and softwar
 <area shape="rect" coords="251,1,651,254" href="/Beethoven-Docs/Beethoven/HW"/>
     </map>
     <img src="/Beethoven-Docs/img/figs/sitemap.jpg" usemap="#GraffleExport"/>
+
+<p> <b>Click the boxes to navigate the site!</b> </p>
 </p>
 
 At the center of it all is your hardware accelerator "core" implementation - a single functional unit.

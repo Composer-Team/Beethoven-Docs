@@ -10,7 +10,7 @@ You would typically implement this in your HDL of choice.
 We are huge fans of [Chisel HDL](https://www.chisel-lang.org), but we do understand the necessity of [System]Verilog,
 so we have added [various utilities](/Beethoven/HW/Verilog) to make it easier to integrate external Verilog modules into your design.
 
-Second, there is the [accelerator configuration](/Beethoven/HW/#accelerator-configuration-and-building).
+Second, there is the [accelerator configuration](/Beethoven/HW/#configuration--build).
 The configuration informs Beethoven _how_ to build your accelerator:
 - What cores do you want in your design?
 - How many of each?
@@ -450,28 +450,28 @@ at byte-granularity and the addresses/lengths must be aligned to size of the dat
 4-byte data bus must only launch 4B-aligned transactions. 
 
 The request channel is identical for readers and writers.
-- `requestChannel.valid` (Output): drive this signal high to start a new transaction. The transaction will begin only
+- `requestChannel.valid` (Input to reader): drive this signal high to start a new transaction. The transaction will begin only
         when the ready and valid are high together on the rising clock edge.
-- `requestChannel.ready` (Input): This signal will be driven high when the reader is ready to begin a new transaction.
+- `requestChannel.ready` (Output from reader): This signal will be driven high when the reader is ready to begin a new transaction.
         In-progress transactions cannot be interrupted an must be fully consumed before the reader is made ready again.
-- `requestChannel.bits.address`: the starting address for the transaction.
-- `requestChannel.bits.len`: the length of a transaction in bytes. This may be made arbitrarily long.
+- `requestChannel.bits.address` (Input to reader):  the starting address for the transaction.
+- `requestChannel.bits.len` (Input to reader): the length of a transaction in bytes. This may be made arbitrarily long.
 
 **Reader Data Channel**: The data channel for the  will begin to provide valid data an indeterminate amount of time after the start of the
 transaction. You must drive the input signals.
-- `dataChannel.inProgress` (Output): This is driven high iff there is an in-progress transaction still active.
-- `dataChannel.data.valid` (Output): This bit is driven high when there is valid data from memory on `data.bits`.
+- `dataChannel.inProgress` (Output from reader): This is driven high iff there is an in-progress transaction still active.
+- `dataChannel.data.valid` (Output from reader): This bit is driven high when there is valid data from memory on `data.bits`.
         It will remain high and the data will not progress to the next word until the `ready` signal is driven high.
-- `dataChannel.data.ready` (Input): This is driven high iff data can be consumed on the data bus.
-- `dataChannel.data.bits` (Output): The requested data.
+- `dataChannel.data.ready` (Input to reader): This is driven high iff data can be consumed on the data bus.
+- `dataChannel.data.bits` (Output from reader): The requested data.
 
 **Writer Data Channel**:
-- `dataChannel.isFlushed` (Output): This is driven high iff there are no writes that have been issued to DRAM but have not
+- `dataChannel.isFlushed` (Output from reader): This is driven high iff there are no writes that have been issued to DRAM but have not
         returned an acknowledgement.
-- `dataChannel.data.valid` (Input): Drive this high when you wish to write the data on `data.bits` to memory. Drive this
+- `dataChannel.data.valid` (Input to reader): Drive this high when you wish to write the data on `data.bits` to memory. Drive this
         signal low when you do not wish to write to memory (including while there is no request active).
-- `dataChannel.data.ready` (Output): This is driven high iff data can be consumed on the data bus.
-- `dataChannel.data.bits` (Input): The data to be written.
+- `dataChannel.data.ready` (Output from reader): This is driven high iff data can be consumed on the data bus.
+- `dataChannel.data.bits` (Input to reader): The data to be written.
 
 
 #### Transaction Waveform
@@ -562,8 +562,7 @@ case class ScratchpadFeatures(readOnly: Boolean = false,
         - `flatPacked` - this assumes that the number of bits are power-of-two byte-aligned so there is really not much
             unpacking that needs to be done.
         - `PackedSubword` - in other cases, the number of bits do not align to a byte boundary and so we introduce this
-            alternative strategy. There is still some memory overhead here, but it can be minimized. See
-            [here](/Beethoven/HW/#packed-subword-scratchpad) for the specification.
+            alternative strategy. There is still some memory overhead here, but it can be minimized.
     - `nBanks` - **[Default=1]**:  For deep, narrow memories, you may want to make better use of memory cells by putting more than one data
         on a row. You can increase this parameter to control the number of datas per row.
     - `writeEnableMuxing` - **[Default=false]**: You can enable byte-wise write enable on the data port using this.
