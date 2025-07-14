@@ -148,17 +148,25 @@ Now we have our testbench. To simulate our code, we'll start up the Beethoven Ru
 <Tabs>
 <TabItem value="a" label="Simulation (Icarus Verilog)" default>
 ```bash
-git clone https://github.com/Composer-Team/Beethoven-Runtime
-cd Beethoven-Runtime
-bash setup_dramsim.sh
-# this will build and run the simulator
-make sim_icarus
+git clone https://github.com/Composer-Team/Beethoven-Software
+cd Beethoven-Software
+# 'icarus' is the default simulator
+make SIMULATOR=icarus
+```
+</TabItem>
+<TabItem value="c" label="Simulation (Verilator)">
+```bash
+git clone https://github.com/Composer-Team/Beethoven-Software
+cd Beethoven-Software
+# if you run predominantly verilator, you can change the default simulator in the makefile
+make SIMULATOR=verilator
+./BeethovenSim
 ```
 </TabItem>
 <TabItem value="b" label="Simulation (VCS)">
 ```bash
-git clone https://github.com/Composer-Team/Beethoven-Runtime
-cd Beethoven-Runtime
+git clone https://github.com/Composer-Team/Beethoven-Software
+cd Beethoven-Software/runtime
 bash setup_dramsim.sh
 mkdir build
 cd build
@@ -168,20 +176,6 @@ make -j
 
 # run the runtime/simulator
 ./BeethovenTop
-```
-</TabItem>
-<TabItem value="c" label="Simulation (Verilator)">
-```bash
-git clone https://github.com/Composer-Team/Beethoven-Runtime
-cd Beethoven-Runtime
-bash setup_dramsim.sh
-mkdir build
-cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DTARGET=sim -DSIMULATOR=verilator
-make -j
-
-# run the runtime/simulator
-./BeethovenRuntime
 ```
 </TabItem>
 <TabItem value="d" label="AWS F2">
